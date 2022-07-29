@@ -22,7 +22,9 @@ defmodule LiveQuery.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:phoenix_pubsub, "~> 2.0"}
+      {:phoenix_live_view, "~> 0.17.11"},
+      {:ecto_sql, "~> 3.0"},
+      {:postgrex, "~> 0.16"}
     ]
   end
 end

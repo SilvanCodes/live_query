@@ -31,7 +31,6 @@ This would leverage the build-in notification deduplication for transactions in 
 
 ### Sketch #2
 
-
 We could collect all tables that are part of live queries.
 We could then setup triggers for updates on the topic of the table name via migrations.
 That would be static setup.
@@ -39,9 +38,10 @@ That would be static setup.
 If every live query would listen to notifications of every table it depends on it is possible that it receives several notifications after transactions are commited.
 Either the cost for multiple queries occurs of which only the first is useful (is it costly when is is exactly the same query?) or debouncing/deduplication has to be handled by LiveQuery.
 
+
 ## MVP
 
-MVP should be to mark a query as live and receive notification about changes once the data behind the query was touched.
+MVP is to state tables a LiveView uses to fetch its data and receive notifications about changes once the data in taht tables was touched.
 
 Create [TRIGGER](https://www.postgresql.org/docs/current/sql-createtrigger.html)/[NOTIFY](https://www.postgresql.org/docs/current/sql-notify.html) and according [trigger function](https://www.postgresql.org/docs/current/plpgsql-trigger.html) via [Ecto.Migration.execute/2](https://hexdocs.pm/ecto_sql/Ecto.Migration.html#execute/2)
 
@@ -52,9 +52,36 @@ Distribute notifications from PostgreSQL via [Phoenix.PubSub.broadcast/3](https:
 PostgreSQL-Channel-Name is table name.
 Phoenix.PubSub topic is table name.
 
-Would require explicitly listing all tables relevant to a LiveView's data.
+Requires explicitly listing all tables relevant to a LiveView's data.
+
+```elixir
+use LiveQuery.Notifications, for: ["users", "posts"]
+```
 
 Create mix task to generate migration from listed tables.
+
+Create `LiveQuery.Listener` module to handle subscriptions
+
+- checks for existence of triggers, errors/warns otherwise
+- monitors LiveViews to automatically issue unlisten
+- publishes notifications via PubSub
+
+### Architecture
+
+Before runtime:
+Mix task => Migration
+
+At runtime:
+                                          +--------------Elixir/Phoenix----------------------------------------------------------------+
+                                          | LiveViews mount +=> ask to register LISTEN => warning/error when table listener not set up |
+                                          |                 |                                                                          |
+                                          |                 +=> subscribe to PubSub                                                    |
+                                          |                                                                                            |
++--------------Database--------------+    |                                                                                            |
+| tables change => TRIGGER => NOTIFY | => | LISTEN => (debounce) => PubSub => LiveViews get notification                               |
++------------------------------------+    +--------------------------------------------------------------------------------------------+
+
+### Stuff
 
 ```shell
 mix do live_query.gen.migration, ecto.migrate
@@ -70,66 +97,18 @@ How to rollback outdated triggers?
 
 How to only create new triggers?
 
+=> DELETE all old triggers in every migration
+
 Possible solution: Never write out migrations, only generate and apply them at application startup.
 
 Initial solution: Create all triggers for currently listed tables on every live_query.migrate call.
 
 How to remind devs to run live_query.migrate when tables have changed?
 
-Create macro to automatically subscribe to listed tables.
+=> when listen call is issued, check if DB contains corresponding trigger
+
 
 ```elixir
-
-defmodule LiveQuery.Supervisor do
-
-end
-
-defmodule LiveQuery.Notify do
-    defp on_changes(tables) do
-        for table <- tables do
-            Phoenix.PubSub.subscribe(:live_query_notifications, table)
-        end
-    end
-
-    def on_mount(tables, _params, _session, socket) when is_list(tables) do
-        LiveQuery.Notify.on_changes(tables)
-        {:cont, socket}
-    end
-
-    defmacro __using__(opts) do
-        tables =
-            case opts[:tables] do
-                tables when is_list(tables) ->
-                    tables
-                other ->
-                    raise ArgumentError,
-                            ":tables expects a list of table names of the from [\"my_table\", \"my_other_table\"]" <>
-                            "got: #{inspect(other)}"
-            end
-
-        quote bind_quoted: [tables: tables] do
-            Module.register_attribute(__MODULE__, :live_query_notifications_for, persist: true)
-            Module.put_attribute(__MODULE__, :live_query_notifications_for, tables)
-
-            on_mount {LiveQuery.Notify, tables}   
-        end
-    end
-end
-
-# possibility 1
-use LiveQuery.Notify, tables: ["users", "posts"]
-
-# possibility 2
-on_mount {LiveQuery.Notify, ["users", "posts"]}
-
-def mount(_params, %{"current_user_id" => user_id}, socket) do
-    # possibility 3
-    LiveQuery.Notify.on_changes(["users", "posts"])
-
-    temperature = Thermostat.get_user_reading(user_id)
-    {:ok, assign(socket, :temperature, temperature)}
-  end
-
 def handle_info({live_query: update}, socket) do
     {table: table, action: action} = update 
 
@@ -139,13 +118,13 @@ def handle_info({live_query: update}, socket) do
   end
 ```
 
-How to subscribe to relevant topics from macro?
-
-
-
 ## Questions
 
 What would it cost to blantly setup TRIGGER/NOTIFY for every database table?
+=> disregarded
+
+What is the cost of having many listeners for one NOTIFY call?
+=> Postgrex.Notifications only sets up one LISTEN per channels, then broadcasts to any listening process
 
 
 ## What do we build on?

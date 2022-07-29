@@ -8,7 +8,7 @@ defmodule LiveQuery.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      {Phoenix.PubSub, name: LiveQuery.PubSub}
+      {Postgrex.Notifications, name: LiveQuery.Notifications}
       # Starts a worker by calling: LiveQuery.Worker.start_link(arg)
       # {LiveQuery.Worker, arg}
     ]
