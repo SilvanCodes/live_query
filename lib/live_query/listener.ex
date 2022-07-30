@@ -20,6 +20,11 @@ defmodule LiveQuery.Listener do
     {:ok, %{}}
   end
 
+  @doc """
+  Called when a LiveView with `use LiveQuery.Notifications``mounts.any()
+
+  Adds that LiveView process to the list of notifyees and starts listening for any table that LiveView is the first on to be notified about.
+  """
   def handle_cast({:listen_for, tables: tables, notifyee: notifyee}, state) do
     notifyee_ref = Process.monitor(notifyee)
 
@@ -44,6 +49,11 @@ defmodule LiveQuery.Listener do
     {:noreply, state}
   end
 
+  @doc """
+  Called when a LiveView process ends.
+
+  Unlistens from any tables when that LiveView was the last process interested in notifications about those tables.
+  """
   def handle_info({:DOWN, ref, :process, _object, _reason}, state) do
     state =
       state
@@ -60,6 +70,19 @@ defmodule LiveQuery.Listener do
       |> Enum.into(state)
 
     {:noreply, state}
+  end
+
+  @doc """
+  Called when any listened channel receives a notification.
+
+  Send from Postgrex.Notifications.
+  """
+  def handle_info({:notification, _connection_pid, _listen_ref, channel, _payload}) do
+    Phoenix.PubSub.broadcast(
+      LiveQuery.PubSub,
+      "live_query:#{channel}",
+      {:live_query_notification, %{table: channel}}
+    )
   end
 
   defp start_listen_for_table(table) do

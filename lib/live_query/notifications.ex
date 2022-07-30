@@ -31,8 +31,8 @@ defmodule LiveQuery.Notifications do
 
   defp receive_notifications_for(tables) do
     for table <- tables do
-      IO.puts("listening to #{table}")
-      {:ok, _listen_ref} = Postgrex.Notifications.listen(LiveQuery.Notifications, table)
+      IO.puts("subscribing to #{table}")
+      Phoenix.PubSub.subscribe(LiveQuery.PubSub, "live_query:#{table}")
     end
   end
 end
