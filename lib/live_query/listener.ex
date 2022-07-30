@@ -5,8 +5,8 @@ defmodule LiveQuery.Listener do
 
   ## CLIENT ##
 
-  def start_link(state) do
-    GenServer.start_link(__MODULE__, state, name: __MODULE__)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @spec listen_for(list(binary()), pid()) :: :ok
@@ -16,7 +16,7 @@ defmodule LiveQuery.Listener do
 
   ## CALLBACKS ##
 
-  def init(_state) do
+  def init(_opts) do
     {:ok, %{}}
   end
 
@@ -29,18 +29,17 @@ defmodule LiveQuery.Listener do
 
         listener =
           case state[table_atom] do
-            listener = %__MODULE__{notifyee_refs: notifyee_refs} ->
-              %__MODULE__{listener | notifyee_refs: [notifyee_ref | notifyee_refs]}
+            %__MODULE__{notifyee_refs: notifyee_refs} ->
+              %__MODULE__{state[table_atom] | notifyee_refs: [notifyee_ref | notifyee_refs]}
 
             nil ->
-              ensure_table_trigger_exists(table)
-              {:ok, listen_ref} = Postgrex.Notifications.listen(LiveQuery.Notifications, table)
+              {:ok, listen_ref} = start_listen_for_table(table)
               %__MODULE__{listen_ref: listen_ref, notifyee_refs: [notifyee_ref]}
           end
 
         {table_atom, listener}
       end
-      |> Map.new()
+      |> Enum.into(state)
 
     {:noreply, state}
   end
@@ -48,25 +47,31 @@ defmodule LiveQuery.Listener do
   def handle_info({:DOWN, ref, :process, _object, _reason}, state) do
     state =
       state
-      |> Map.to_list()
       |> Enum.map(fn {table, listener} ->
         case listener do
           %__MODULE__{listen_ref: listen_ref, notifyee_refs: [^ref]} ->
-            :ok = Postgrex.Notifications.unlisten(LiveQuery.Notifications, listen_ref)
-
+            stop_listen_for_table(listen_ref)
             {table, nil}
 
-          listener = %__MODULE__{notifyee_refs: notifyee_refs} ->
+          %__MODULE__{notifyee_refs: notifyee_refs} ->
             %__MODULE__{listener | notifyee_refs: notifyee_refs |> Enum.filter(&(&1 != ref))}
         end
       end)
-      |> Map.new()
+      |> Enum.into(state)
 
     {:noreply, state}
   end
 
+  defp start_listen_for_table(table) do
+    ensure_table_trigger_exists(table)
+    Postgrex.Notifications.listen(LiveQuery.Notifications, table)
+  end
+
+  defp stop_listen_for_table(listen_ref) do
+    :ok = Postgrex.Notifications.unlisten(LiveQuery.Notifications, listen_ref)
+  end
+
   defp ensure_table_trigger_exists(_table) do
     # warn or error when does not exist
-    true
   end
 end
