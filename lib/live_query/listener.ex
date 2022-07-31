@@ -21,7 +21,7 @@ defmodule LiveQuery.Listener do
   end
 
   @doc """
-  Called when a LiveView with `use LiveQuery.Notifications``mounts.any()
+  Called when a LiveView with `use LiveQuery.Notifications` mounts.
 
   Adds that LiveView process to the list of notifyees and starts listening for any table that LiveView is the first on to be notified about.
   """
@@ -29,7 +29,8 @@ defmodule LiveQuery.Listener do
     notifyee_ref = Process.monitor(notifyee)
 
     state =
-      for table <- tables do
+      tables
+      |> Enum.map(fn table ->
         table_atom = table |> String.to_atom()
 
         listener =
@@ -43,7 +44,7 @@ defmodule LiveQuery.Listener do
           end
 
         {table_atom, listener}
-      end
+      end)
       |> Enum.into(state)
 
     {:noreply, state}
@@ -86,15 +87,18 @@ defmodule LiveQuery.Listener do
   end
 
   defp start_listen_for_table(table) do
-    ensure_table_trigger_exists(table)
-    Postgrex.Notifications.listen(LiveQuery.Notifications, table)
+    if table_trigger_exists?(table) do
+      Postgrex.Notifications.listen(LiveQuery.Notifications, table)
+    else
+      # warn or error about missing trigger
+    end
   end
 
   defp stop_listen_for_table(listen_ref) do
     :ok = Postgrex.Notifications.unlisten(LiveQuery.Notifications, listen_ref)
   end
 
-  defp ensure_table_trigger_exists(_table) do
-    # warn or error when does not exist
+  defp table_trigger_exists?(_table) do
+    true
   end
 end
