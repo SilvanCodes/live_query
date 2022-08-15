@@ -23,6 +23,8 @@ defmodule LiveQuery.MixProject do
   defp deps do
     [
       {:phoenix_live_view, "~> 0.17.11"},
+      {:floki, ">= 0.30.0", only: :test},
+      {:jason, "~> 1.0", only: :test},
       {:phoenix_pubsub, "~> 2.1.1"},
       {:ecto_sql, "~> 3.0"},
       {:postgrex, "~> 0.16"}

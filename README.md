@@ -110,12 +110,10 @@ How to remind devs to run live_query.migrate when tables have changed?
 
 ```elixir
 def handle_info({live_query: update}, socket) do
-    {table: table, action: action} = update 
+  # react to changes in database
 
-    Process.send_after(self(), :update, 30000)
-    {:ok, temperature} = Thermostat.get_reading(socket.assigns.user_id)
-    {:noreply, assign(socket, :temperature, temperature)}
-  end
+  {:noreply, socket}
+end
 ```
 
 ## Questions

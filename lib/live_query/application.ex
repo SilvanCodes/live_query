@@ -7,16 +7,23 @@ defmodule LiveQuery.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      {Postgrex.Notifications, name: LiveQuery.Notifications},
-      {Phoenix.PubSub, name: LiveQuery.PubSub}
-      # Starts a worker by calling: LiveQuery.Worker.start_link(arg)
-      # {LiveQuery.Worker, arg}
-    ]
+    children = children(Mix.env())
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: LiveQuery.Supervisor]
     Supervisor.start_link(children, opts)
   end
+
+  defp children(:test),
+    do: [
+      LiveQuery.TestEndpoint,
+      {Phoenix.PubSub, name: LiveQuery.PubSub}
+    ]
+
+  defp children(:prod),
+    do: [
+      {Postgrex.Notifications, name: LiveQuery.Notifications},
+      {Phoenix.PubSub, name: LiveQuery.PubSub}
+    ]
 end

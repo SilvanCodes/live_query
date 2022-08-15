@@ -4,6 +4,9 @@ defmodule LiveQuery.Notifications do
 
   Notifications work via the
   """
+
+  require Logger
+
   defmacro __using__(opts) do
     tables =
       case opts[:for] do
@@ -25,14 +28,29 @@ defmodule LiveQuery.Notifications do
   end
 
   def on_mount(tables, _params, _session, socket) when is_list(tables) do
-    if Phoenix.LiveView.connected?(socket), do: receive_notifications_for(tables)
+    if Phoenix.LiveView.connected?(socket) do
+      Logger.info("LiveQuery: LiveView #{inspect(self())} is subscribing to #{inspect(tables)}")
+      receive_notifications_for(tables)
+    end
+
     {:cont, socket}
   end
 
   defp receive_notifications_for(tables) do
-    for table <- tables do
-      IO.puts("subscribing to #{table}")
-      Phoenix.PubSub.subscribe(LiveQuery.PubSub, "live_query:#{table}")
-    end
+    tables
+    |> Enum.map(fn table ->
+      {table, Phoenix.PubSub.subscribe(LiveQuery.PubSub, "live_query:#{table}")}
+    end)
+    |> Enum.each(fn result ->
+      case result do
+        {table, :ok} ->
+          {:ok, table}
+
+        {table, {:error, error}} ->
+          Logger.warn(
+            "LiveQuery: LiveView #{inspect(self())} failed to subscribe to #{table} with #{inspect(error)}"
+          )
+      end
+    end)
   end
 end
